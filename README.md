@@ -9,12 +9,16 @@ Chalice AWS Lambda functions for OU Libraries Derivative and PDF Generation
 ## Installation
 
 1. Ensure access to AWS and proper permissions.
-1. Create SQS queues and configure app.py to use these queues. The functions need the following Action roles to be able to access the queues:
+1. Create 2 AWS SQS queues. The functions deployed by this repo will need the following Action roles to be able to access the queues:
     * sqs:DeleteMessage
     * sqs:GetQueueUrl
     * sqs:ReceiveMessage
     * sqs:SendMessage
-1. Adjust Visibility Timeout of queues (default is 30 seconds) to match lambda_timeout (default is 60 seconds)
+1. Modify the values of the following in app.py to match the names of the added queues:
+    * SQS_QUEUE_DERIV
+    * SQS_QUEUE_PDF
+1. Adjust `Default visibility timeout` of SQS queues (default is 30 seconds) to match `lambda_timeout` (default is 60 seconds)
+1. Adjust `lambda_memory_size` in Chalice's config.json to your needs before deploying.
 1. To deploy run `chalice deploy`
 
 ## TODO
