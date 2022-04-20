@@ -22,6 +22,7 @@ app.debug = True
 app.log.setLevel(logging.DEBUG)
 
 s3_client = boto3.client('s3')
+s3_paginator = s3_client.get_paginator('list_objects_v2')
 sqs = boto3.resource('sqs')
 s3_bucket = 'tdp-bagit'
 
@@ -29,30 +30,35 @@ deriv_queue = sqs.get_queue_by_name(QueueName=SQS_QUEUE_DERIV)
 pdf_queue = sqs.get_queue_by_name(QueueName=SQS_QUEUE_PDF)
 
 
-def _images(prefix, extensions=DEFAULT_IMAGE_EXTENSIONS):
-    """ list images in S3 with filtering by prefix """
-    try:
-        files = [
-            object['Key'] 
-            for object in s3_client.list_objects(Bucket=s3_bucket, Prefix=prefix)['Contents']
-            if object['Key'].endswith(extensions) 
-        ]
-    except KeyError as e:
-        app.log.error(f"Failed to access: {e}")
-        raise NotFoundError("Could not find images matching request!")
-    return files
+def _images(prefix, extensions=DEFAULT_IMAGE_EXTENSIONS, ignore_orig=True):
+    """ yield images in S3 with filtering """
+    for page in s3_paginator.paginate(Bucket=s3_bucket, Prefix=prefix):
+        try:
+            contents = page['Contents']
+        except KeyError as e:
+            app.log.error(f"Failed to access: {e}")
+            raise NotFoundError("Could not find bag matching request!")
+        for obj in contents:
+            try:
+                file = obj['Key']
+            except KeyError as e:
+                app.log.error(f"Failed to access: {e}")
+                raise NotFoundError("Could not find images matching request!")
+            if file.endswith(extensions):
+                if not (ignore_orig and "orig" in Path(file).name.lower()):
+                    yield file
 
 
 @app.route('/images/source/{bag}')
 def images_source(bag):
     """ API endpoint to list available source images """
-    return _images(f'source/{bag}/data/')
+    return list(_images(f'source/{bag}/data/'))
 
 
 @app.route('/images/derivatives/{bag}/{scale}')
 def images_derivative(bag, scale=DEFAULT_IMAGE_SCALE):
     """ API endpoint to list available images at specified scale """
-    return _images(f'derivative/{bag}/{scale}/', extensions=DEFAULT_IMAGE_EXTENSIONS + ("pdf",))
+    return list(_images(f'derivative/{bag}/{scale}/', extensions=DEFAULT_IMAGE_EXTENSIONS + ("pdf",)))
 
 
 @app.route('/images/derivatives/{bag}')
@@ -67,6 +73,7 @@ def available_derivatives(bag):
             ]
         )
     )
+
 
 def _s3_byte_stream(bucket, key):
     """ return an S3 object's data as a BytesIO stream """
