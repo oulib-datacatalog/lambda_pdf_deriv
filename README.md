@@ -14,4 +14,8 @@ Chalice AWS Lambda functions for OU Libraries Derivative and PDF Generation
     * sqs:GetQueueUrl
     * sqs:ReceiveMessage
     * sqs:SendMessage
+1. Adjust Visibility Timeout of queues (default is 30 seconds) to match lambda_timeout (default is 60 seconds)
 1. To deploy run `chalice deploy`
+
+## TODO
+* Create deployment script to setup AWS service dependencies and roles
