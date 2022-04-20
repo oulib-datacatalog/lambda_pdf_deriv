@@ -3,7 +3,6 @@ import logging
 
 from json import dumps, loads
 from pathlib import Path
-from tempfile import TemporaryDirectory
 
 import boto3
 from botocore.exceptions import ClientError
