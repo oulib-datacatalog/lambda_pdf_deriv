@@ -14,9 +14,10 @@ Chalice AWS Lambda functions for OU Libraries Derivative and PDF Generation
     * sqs:GetQueueUrl
     * sqs:ReceiveMessage
     * sqs:SendMessage
-1. Modify the values of the following in app.py to match the names of the added queues:
+1. Modify the values of the following in app.py to match the names of the added queues and the S3 bucket containing bagged files:
     * SQS_QUEUE_DERIV
     * SQS_QUEUE_PDF
+    * S3_BUCKET
 1. Adjust `Default visibility timeout` of SQS queues (default is 30 seconds) to match `lambda_timeout` (default is 60 seconds)
 1. Adjust `lambda_memory_size` in Chalice's config.json to your needs before deploying.
 1. To deploy run `chalice deploy`
