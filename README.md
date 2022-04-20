@@ -24,3 +24,4 @@ Chalice AWS Lambda functions for OU Libraries Derivative and PDF Generation
 
 ## TODO
 * Create deployment script to setup AWS service dependencies and roles
+* Store results in a database
