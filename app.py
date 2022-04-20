@@ -15,16 +15,15 @@ DEFAULT_IMAGE_EXTENSIONS = ("jpg", "tif", "tiff", "png")
 
 SQS_QUEUE_DERIV = "infx_deriv_gen"
 SQS_QUEUE_PDF = "infx_pdf_gen"
-
+S3_BUCKET = 'tdp-bagit'
 
 app = Chalice(app_name='lambda_pdf_deriv')
-app.debug = True
-app.log.setLevel(logging.DEBUG)
+app.debug = False
+app.log.setLevel(logging.INFO)
 
 s3_client = boto3.client('s3')
 s3_paginator = s3_client.get_paginator('list_objects_v2')
 sqs = boto3.resource('sqs')
-s3_bucket = 'tdp-bagit'
 
 deriv_queue = sqs.get_queue_by_name(QueueName=SQS_QUEUE_DERIV)
 pdf_queue = sqs.get_queue_by_name(QueueName=SQS_QUEUE_PDF)
@@ -32,7 +31,7 @@ pdf_queue = sqs.get_queue_by_name(QueueName=SQS_QUEUE_PDF)
 
 def _images(prefix, extensions=DEFAULT_IMAGE_EXTENSIONS, ignore_orig=True):
     """ yield images in S3 with filtering """
-    for page in s3_paginator.paginate(Bucket=s3_bucket, Prefix=prefix):
+    for page in s3_paginator.paginate(Bucket=S3_BUCKET, Prefix=prefix):
         try:
             contents = page['Contents']
         except KeyError as e:
@@ -69,7 +68,7 @@ def available_derivatives(bag):
         set(
             [
                 item['Key'].split("/")[2]
-                for item in s3_client.list_objects(Bucket=s3_bucket, Prefix=f'derivative/{bag}/')['Contents']
+                for item in s3_client.list_objects(Bucket=S3_BUCKET, Prefix=f'derivative/{bag}/')['Contents']
             ]
         )
     )
@@ -87,7 +86,7 @@ def _generate_pdf(bag):
     destination = f"derivative/{bag}/pdf/{bag}.pdf"
 
     try:  # Test for existing pdf
-        s3_client.head_object(Bucket=s3_bucket, Key=destination)
+        s3_client.head_object(Bucket=S3_BUCKET, Key=destination)
         app.log.info(f"PDF already exists: {destination}")
         return {"message": "PDF already exists"}
     except ClientError:
@@ -101,7 +100,7 @@ def _generate_pdf(bag):
 
     # get contents of first image to bootstrap PDF generation
     image_path = image_paths.pop(0) 
-    pdf = Image.open(_s3_byte_stream(bucket=s3_bucket, key=image_path))
+    pdf = Image.open(_s3_byte_stream(bucket=S3_BUCKET, key=image_path))
     
     # save generated PDF back to S3
     pdf_file = io.BytesIO()
@@ -110,13 +109,13 @@ def _generate_pdf(bag):
         format="PDF",
         save_all=True,
         append_images=(
-            Image.open(_s3_byte_stream(bucket=s3_bucket, key=image_path))
+            Image.open(_s3_byte_stream(bucket=S3_BUCKET, key=image_path))
             for image_path in image_paths
         )
     )
     pdf_file.flush()
     pdf_file.seek(0)
-    s3_client.put_object(Bucket=s3_bucket, Key=destination, Body=pdf_file)    
+    s3_client.put_object(Bucket=S3_BUCKET, Key=destination, Body=pdf_file)
 
 
 @app.on_sqs_message(queue=SQS_QUEUE_PDF, batch_size=1)
@@ -147,13 +146,13 @@ def resize_individual(scale, bag, image_path):
     destination = f"derivative/{bag}/{scale}/{deriv_image_path}"
     
     try:  # Test for existing derivative
-        s3_client.head_object(Bucket=s3_bucket, Key=destination)
+        s3_client.head_object(Bucket=S3_BUCKET, Key=destination)
         app.log.info(f"Derivative already exists: {destination}")
         return {"message": "image already exists"}
     except ClientError:
         pass  # does not exist - continue
     
-    image_data = s3_client.get_object(Bucket=s3_bucket, Key=f"source/{bag}/data/{image_path}")
+    image_data = s3_client.get_object(Bucket=S3_BUCKET, Key=f"source/{bag}/data/{image_path}")
     source_image = Image.open(io.BytesIO(image_data['Body'].read()))
 
     size = (x * float(scale) for x in source_image.size)
@@ -164,7 +163,7 @@ def resize_individual(scale, bag, image_path):
     image_file.flush()
     image_file.seek(0)
     
-    s3_client.put_object(Bucket=s3_bucket, Key=destination, Body=image_file)
+    s3_client.put_object(Bucket=S3_BUCKET, Key=destination, Body=image_file)
     app.log.info(f"Created S3 object: {destination}")
     return {"message": "created resized image"}
 
