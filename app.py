@@ -18,7 +18,7 @@ S3_BUCKET = 'tdp-bagit'
 
 app = Chalice(app_name='lambda_pdf_deriv')
 app.debug = False
-app.log.setLevel(logging.INFO)
+app.log.setLevel(logging.WARN)
 
 s3_client = boto3.client('s3')
 s3_paginator = s3_client.get_paginator('list_objects_v2')
