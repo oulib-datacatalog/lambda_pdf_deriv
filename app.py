@@ -44,6 +44,7 @@ def _images(prefix, extensions=DEFAULT_IMAGE_EXTENSIONS, ignore_orig=True):
                 raise NotFoundError("Could not find images matching request!")
             if file.endswith(extensions):
                 if not (ignore_orig and "orig" in Path(file).name.lower()):
+                    # TODO: add ignore of "dotfiles"
                     yield file
 
 
