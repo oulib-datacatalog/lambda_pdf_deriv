@@ -20,7 +20,7 @@ S3_BUCKET = 'tdp-bagit'
 
 app = Chalice(app_name='lambda_pdf_deriv')
 app.debug = False
-app.log.setLevel(logging.INFO)
+app.log.setLevel(logging.WARN)
 
 s3_client = boto3.client('s3')
 s3_paginator = s3_client.get_paginator('list_objects_v2')
@@ -54,10 +54,19 @@ def _images(prefix, extensions=DEFAULT_IMAGE_EXTENSIONS, ignore_orig=True):
                 file = obj['Key']
                 size = obj['Size']
             except KeyError as e:
+<<<<<<< HEAD
                 app.log.error(f'Failed to access: {e}')
                 raise NotFoundError('Could not find images matching request!')
             if _filter_keep(file, extensions=extensions, ignore_orig=ignore_orig):
                 yield {'file': file, 'size': size}
+=======
+                app.log.error(f"Failed to access: {e}")
+                raise NotFoundError("Could not find images matching request!")
+            if file.endswith(extensions):
+                if not (ignore_orig and "orig" in Path(file).name.lower()):
+                    # TODO: add ignore of "dotfiles"
+                    yield file
+>>>>>>> 99d73c25128ccd51c58266498c9c0f603de6f106
 
 
 @app.route('/images/source/{bag}')
