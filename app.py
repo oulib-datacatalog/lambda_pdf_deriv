@@ -19,8 +19,8 @@ SQS_QUEUE_PDF = 'infx_pdf_gen'
 S3_BUCKET = 'tdp-bagit'
 
 app = Chalice(app_name='lambda_pdf_deriv')
-app.debug = True
-app.log.setLevel(logging.DEBUG)
+app.debug = False
+app.log.setLevel(logging.INFO)
 
 s3_client = boto3.client('s3')
 s3_paginator = s3_client.get_paginator('list_objects_v2')
