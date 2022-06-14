@@ -3,7 +3,7 @@ import logging
 
 from json import dumps, loads
 from pathlib import Path
-from typing import Generator, BinaryIO
+from typing import Iterator, BinaryIO
 
 import boto3
 from botocore.exceptions import ClientError
@@ -42,8 +42,7 @@ def _filter_keep(file: str, extensions: tuple[str, ...] = DEFAULT_IMAGE_EXTENSIO
     return True
 
 
-def _images(prefix: str, extensions: tuple[str, ...] = DEFAULT_IMAGE_EXTENSIONS, ignore_orig: bool = True) -> Generator[
-    dict]:
+def _images(prefix: str, extensions: tuple[str, ...] = DEFAULT_IMAGE_EXTENSIONS, ignore_orig: bool = True) -> Iterator[dict]:
     """ yield images in S3 with filtering including file size """
     for page in s3_paginator.paginate(Bucket=S3_BUCKET, Prefix=prefix):
         try:
