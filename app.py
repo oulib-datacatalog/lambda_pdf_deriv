@@ -3,6 +3,7 @@ import logging
 
 from json import dumps, loads
 from pathlib import Path
+from typing import Generator, BinaryIO
 
 import boto3
 from botocore.exceptions import ClientError
@@ -19,7 +20,7 @@ SQS_QUEUE_PDF = 'infx_pdf_gen'
 S3_BUCKET = 'tdp-bagit'
 
 app = Chalice(app_name='lambda_pdf_deriv')
-app.debug = False
+app.debug = True
 app.log.setLevel(logging.WARN)
 
 s3_client = boto3.client('s3')
@@ -30,19 +31,20 @@ deriv_queue = sqs.get_queue_by_name(QueueName=SQS_QUEUE_DERIV)
 pdf_queue = sqs.get_queue_by_name(QueueName=SQS_QUEUE_PDF)
 
 
-def _filter_keep(file, extensions=DEFAULT_IMAGE_EXTENSIONS, ignore_orig=True):
-    ''' filters to apply to a file's name to determine to keep '''
+def _filter_keep(file: str, extensions: tuple[str, ...] = DEFAULT_IMAGE_EXTENSIONS, ignore_orig: bool = True) -> bool:
+    """ filters to apply to a file's name to determine to keep """
     if not file.endswith(extensions):
         return False
-    if (ignore_orig and 'orig' in Path(file).name.lower()):
+    if ignore_orig and 'orig' in Path(file).name.lower():
         return False
     if Path(file).name.startswith('.'):
         return False
     return True
 
 
-def _images(prefix, extensions=DEFAULT_IMAGE_EXTENSIONS, ignore_orig=True):
-    ''' yield images in S3 with filtering '''
+def _images(prefix: str, extensions: tuple[str, ...] = DEFAULT_IMAGE_EXTENSIONS, ignore_orig: bool = True) -> Generator[
+    dict]:
+    """ yield images in S3 with filtering including file size """
     for page in s3_paginator.paginate(Bucket=S3_BUCKET, Prefix=prefix):
         try:
             contents = page['Contents']
@@ -56,26 +58,26 @@ def _images(prefix, extensions=DEFAULT_IMAGE_EXTENSIONS, ignore_orig=True):
             except KeyError as e:
                 app.log.error(f'Failed to access: {e}')
                 raise NotFoundError('Could not find images matching request!')
-            
+
             if _filter_keep(file, extensions=extensions, ignore_orig=ignore_orig):
                 yield {'file': file, 'size': size}
 
 
 @app.route('/images/source/{bag}')
-def images_source(bag):
-    ''' API endpoint to list available source images '''
+def images_source(bag: str) -> list[dict]:
+    """ API endpoint to list available source images and file sizes """
     return list(_images(f'source/{bag}/data/'))
 
 
 @app.route('/images/derivatives/{bag}/{scale}')
-def images_derivative(bag, scale=DEFAULT_IMAGE_SCALE):
-    ''' API endpoint to list available images at specified scale '''
+def images_derivative(bag: str, scale: float = DEFAULT_IMAGE_SCALE) -> list[dict]:
+    """ API endpoint to list available images at specified scale """
     return list(_images(f'derivative/{bag}/{scale}/', extensions=DEFAULT_IMAGE_EXTENSIONS + ('pdf',)))
 
 
 @app.route('/images/derivatives/{bag}')
-def available_derivatives(bag):
-    ''' API endpoint to list available derivative scales '''
+def available_derivatives(bag: str) -> list[str]:
+    """ API endpoint to list available derivative scales """
     # FIXME: this will get the first 1000 items matched against prefix and may miss some results
     return list(
         set(
@@ -87,13 +89,13 @@ def available_derivatives(bag):
     )
 
 
-def _s3_byte_stream(bucket, key):
-    ''' return an S3 object's data as a BytesIO stream '''
+def _s3_byte_stream(bucket: str, key: str) -> BinaryIO:
+    """ return an S3 object's data as a BytesIO stream """
     return io.BytesIO(s3_client.get_object(Bucket=bucket, Key=key)['Body'].read())
 
 
-def _generate_pdf(bag, title=None, author=None, subject=None, keywords=None):
-    ''' Generates PDF from default derivative images '''
+def _generate_pdf(bag: str, title: str = None, author: str = None, subject: str = None, keywords: str = None) -> dict:
+    """ Generates PDF from default derivative images """
     destination = f'derivative/{bag}/pdf/{bag}.pdf'
 
     try:  # Test for existing pdf
@@ -102,12 +104,12 @@ def _generate_pdf(bag, title=None, author=None, subject=None, keywords=None):
         return {'message': 'PDF already exists'}
     except ClientError:
         pass  # does not exist - continue
-    
+
     try:  # Test for existing derivatives
         image_paths, image_sizes = zip(
             *((item['file'], item['size'])
               for item in images_derivative(bag, scale=DEFAULT_IMAGE_SCALE)
-            )
+              )
         )
     except NotFoundError:
         app.log.error('Missing derivative - failed to generate PDF')
@@ -120,11 +122,11 @@ def _generate_pdf(bag, title=None, author=None, subject=None, keywords=None):
     if total_deriv_size > LAMBDA_MAX_MEMORY_FOR_PDF / 2:  # TODO: test memory usage to confirm setting
         app.log.error(f'Total size of derivatives is more than half of available memory: {total_deriv_size}')
         return {'message': 'memory limit exceeded'}
-    
+
     # get contents of first image to bootstrap PDF generation
     image_path = image_paths[0]
     pdf = Image.open(_s3_byte_stream(bucket=S3_BUCKET, key=image_path))
-    
+
     # save generated PDF back to S3
     pdf_file = io.BytesIO()
     pdf.save(
@@ -147,11 +149,11 @@ def _generate_pdf(bag, title=None, author=None, subject=None, keywords=None):
     except:
         app.log.error(f'Failed to save PDF to S3 for bag: {bag}')
     app.log.info(f'Generated PDF for bag: {bag}')
-
+    return {'message': 'success'}
 
 @app.on_sqs_message(queue=SQS_QUEUE_PDF, batch_size=1)
-def pdf_generator(event):
-    ''' Watch for messages to generate PDF '''
+def pdf_generator(event) -> None:
+    """ Watch for messages to generate PDF """
     for record in event:
         record_body = loads(record.body)
         app.log.debug(record_body)
@@ -159,8 +161,8 @@ def pdf_generator(event):
 
 
 @app.route('/pdf/{bag}', methods=['GET', 'POST'])
-def generate_pdf(bag):
-    ''' API endpoint for requesting PDF generation '''
+def generate_pdf(bag: str) -> dict:
+    """ API endpoint for requesting PDF generation """
     request = app.current_request
     data = request.json_body if request.json_body else {}
     app.log.debug(f'Using queue: {pdf_queue}')
@@ -178,21 +180,21 @@ def generate_pdf(bag):
     )
     app.log.debug(resp)
     return {'message': 'submitted for processing'}
-        
+
 
 @app.route('/resize/{bag}/{scale}/{image_path}')
-def resize_individual(bag, scale, image_path):
-    ''' API endpoint to resize specific image '''
+def resize_individual(bag: str, scale: float, image_path: str) -> dict:
+    """ API endpoint to resize specific image """
     deriv_image_path = Path(image_path).with_suffix('.jpg')
     destination = f'derivative/{bag}/{scale}/{deriv_image_path}'
-    
+
     try:  # Test for existing derivative
         s3_client.head_object(Bucket=S3_BUCKET, Key=destination)
         app.log.info(f'Derivative already exists: {destination}')
         return {'message': 'image already exists'}
     except ClientError:
         pass  # does not exist - continue
-    
+
     try:
         source_image = Image.open(_s3_byte_stream(S3_BUCKET, f'source/{bag}/data/{image_path}'))
     except Exception as e:
@@ -207,15 +209,15 @@ def resize_individual(bag, scale, image_path):
     source_image.save(image_file, format='JPEG')
     image_file.flush()
     image_file.seek(0)
-    
+
     s3_client.put_object(Bucket=S3_BUCKET, Key=destination, Body=image_file)
     app.log.info(f'Created S3 object: {destination}')
     return {'message': 'created resized image'}
 
 
 @app.on_sqs_message(queue=SQS_QUEUE_DERIV, batch_size=1)
-def deriv_generator(event):
-    ''' watch for messages to generate an image derivative '''
+def deriv_generator(event) -> None:
+    """ watch for messages to generate an image derivative """
     for record in event:
         record_body = record.body
         app.log.debug(record_body)
@@ -224,14 +226,12 @@ def deriv_generator(event):
 
 
 @app.route('/resize/{bag}/{scale}')
-def resize(bag, scale):
-    ''' API endpoint to resize images for specified bag 
-        
-    '''
+def resize(bag: str, scale: float) -> dict:
+    """ API endpoint to resize images for specified bag """
     app.log.debug(f'Using queue: {deriv_queue}')
     app.log.info(f'Processing {bag}')
     for full_s3_key in images_source(bag):
-        image = full_s3_key.split('/')[-1]
+        image = full_s3_key.get("file").split('/')[-1]
         resp = deriv_queue.send_message(
             MessageBody=dumps((bag, scale, image))
         )
@@ -240,6 +240,6 @@ def resize(bag, scale):
 
 
 @app.route('/resize/{bag}/default')
-def resize_default(bag):
-    ''' API endpoint to resize images by default scale for specified bag '''
+def resize_default(bag: str) -> dict:
+    """ API endpoint to resize images by default scale for specified bag """
     return resize(scale=DEFAULT_IMAGE_SCALE, bag=bag)
