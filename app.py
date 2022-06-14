@@ -20,7 +20,7 @@ SQS_QUEUE_PDF = 'infx_pdf_gen'
 S3_BUCKET = 'tdp-bagit'
 
 app = Chalice(app_name='lambda_pdf_deriv')
-app.debug = True
+app.debug = False
 app.log.setLevel(logging.WARN)
 
 s3_client = boto3.client('s3')
@@ -149,6 +149,7 @@ def _generate_pdf(bag: str, title: str = None, author: str = None, subject: str 
         app.log.error(f'Failed to save PDF to S3 for bag: {bag}')
     app.log.info(f'Generated PDF for bag: {bag}')
     return {'message': 'success'}
+
 
 @app.on_sqs_message(queue=SQS_QUEUE_PDF, batch_size=1)
 def pdf_generator(event) -> None:
