@@ -7,6 +7,11 @@
       "tags": {
         "Unit": "Informatics"
       },
+      "environment_variables": {
+        "SQS_QUEUE_DERIV": "infx_deriv_gen",
+        "SQS_QUEUE_PDF": "infx_pdf_gen",
+        "S3_BUCKET": "tdp-bagit"
+      },
       "api_gateway_stage": "api",
       "lambda_functions": {
         "deriv_generator": {

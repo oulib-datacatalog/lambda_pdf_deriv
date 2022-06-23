@@ -3,6 +3,7 @@ import logging
 import traceback
 
 from json import dumps, loads
+from os import getenv
 from pathlib import Path
 from typing import Iterator, BinaryIO
 
@@ -16,9 +17,9 @@ DEFAULT_IMAGE_EXTENSIONS = ('jpg', 'tif', 'tiff', 'png')
 
 LAMBDA_MAX_MEMORY_FOR_PDF = 2147483648  # 2GB
 
-SQS_QUEUE_DERIV = 'infx_deriv_gen'
-SQS_QUEUE_PDF = 'infx_pdf_gen'
-S3_BUCKET = 'tdp-bagit'
+SQS_QUEUE_DERIV = getenv("SQS_QUEUE_DERIV")
+SQS_QUEUE_PDF = getenv("SQS_QUEUE_PDF")
+S3_BUCKET = getenv("S3_BUCKET")
 
 app = Chalice(app_name='lambda_pdf_deriv')
 app.debug = False
