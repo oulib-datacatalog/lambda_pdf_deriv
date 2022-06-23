@@ -4,12 +4,21 @@
   "automatic_layer": true,
   "stages": {
     "dev": {
+      "tags": {
+        "Unit": "Informatics"
+      },
       "api_gateway_stage": "api",
       "lambda_functions": {
         "deriv_generator": {
+          "tags": {
+            "Product": "Derivative Generation"
+          },
           "lambda_memory_size": 1024
         },
         "pdf_generator": {
+          "tags": {
+            "Product": "PDF Generation"
+          },
           "lambda_memory_size": 2048
         }
       }
