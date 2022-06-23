@@ -1,5 +1,6 @@
 import io
 import logging
+import traceback
 
 from json import dumps, loads
 from pathlib import Path
@@ -199,7 +200,7 @@ def resize_individual(bag: str, scale: float, image_path: str) -> dict:
         source_image = Image.open(_s3_byte_stream(S3_BUCKET, f'source/{bag}/data/{image_path}'))
     except Exception as e:
         app.log.error(f'Failed to open source image: {image_path}')
-        app.log.error(e)
+        app.log.error(traceback.format_exc())
         return {'message': 'error opening source image'}
 
     size = (x * float(scale) for x in source_image.size)
