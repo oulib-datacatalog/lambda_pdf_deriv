@@ -10,10 +10,16 @@
       "environment_variables": {
         "SQS_QUEUE_DERIV": "infx_deriv_gen",
         "SQS_QUEUE_PDF": "infx_pdf_gen",
-        "S3_BUCKET": "tdp-bagit"
+        "S3_BUCKET": "ul-bagit"
       },
       "api_gateway_stage": "api",
       "lambda_functions": {
+        "resize_individual": {
+          "tags": {
+            "Product": "Derivative Generation"
+          },
+          "lambda_memory_size": 1024
+        },
         "deriv_generator": {
           "tags": {
             "Product": "Derivative Generation"
