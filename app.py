@@ -66,8 +66,8 @@ def _images(prefix: str, extensions: tuple[str, ...] = DEFAULT_IMAGE_EXTENSIONS,
                 yield {'file': file, 'size': size}
 
 
-@app.route('/find/{bag}')
-def find_source_bag(bag: str) -> str:
+
+def _find_source_bag(bag: str) -> str:
     """ find a bag in S3 returnng path and bag name"""
     for location in SOURCE_BAG_LOCATIONS:
         key = f'{location}/{bag}/bagit.txt'
@@ -79,10 +79,15 @@ def find_source_bag(bag: str) -> str:
     raise NotFoundError('Could not find bag matching request!')
 
 
+@app.route('/find/{bag}')
+def find_source_bag(bag: str) -> str:
+    return _find_source_bag(bag)
+
+
 @app.route('/images/source/{bag}')
-def images_source(bag: str) -> list[dict]:
+def images_source(bag: str, location: str = "") -> list[dict]:
     """ API endpoint to list available source images and file sizes """
-    location = find_source_bag(bag)['location']
+    location = _find_source_bag(bag)['location'] if not location else location
     return list(_images(f'{location}/data/'))
 
 
@@ -249,9 +254,9 @@ def resize(bag: str, scale: float) -> dict:
     """ API endpoint to resize images for specified bag """
     app.log.debug(f'Using queue: {deriv_queue}')
     app.log.info(f'Processing {bag}')
-    location = find_source_bag(bag)['location']
+    location = _find_source_bag(bag)['location']
     app.log.info(f'Using location {location}')
-    for full_s3_key in images_source(bag):
+    for full_s3_key in images_source(bag, location):
         image = full_s3_key.get("file").split('/')[-1]
         resp = deriv_queue.send_message(
             MessageBody=dumps((bag, scale, image, location))
