@@ -85,10 +85,10 @@ def find_source_bag(bag: str) -> str:
 
 
 @app.route('/images/source/{bag}')
-def images_source(bag: str, location: str = "") -> list[dict]:
+def images_source(bag: str, location_and_bag: str = "") -> list[dict]:
     """ API endpoint to list available source images and file sizes """
-    location = _find_source_bag(bag)['location'] if not location else location
-    return list(_images(f'{location}/data/'))
+    location_and_bag = _find_source_bag(bag)['location'] if not location_and_bag else location_and_bag
+    return list(_images(f'{location_and_bag}/data/'))
 
 
 @app.route('/images/derivatives/{bag}/{scale}')
