@@ -15,6 +15,8 @@ from PIL import Image
 DEFAULT_IMAGE_SCALE = 0.4  # of original size
 DEFAULT_IMAGE_EXTENSIONS = ('jpg', 'tif', 'tiff', 'png')
 
+SOURCE_BAG_LOCATIONS = ['source', 'private/external-preservation', 'private/preservation', 'private/private', 'private/shareok']
+
 LAMBDA_MAX_MEMORY_FOR_PDF = 2147483648  # 2GB
 
 SQS_QUEUE_DERIV = getenv("SQS_QUEUE_DERIV")
@@ -22,7 +24,7 @@ SQS_QUEUE_PDF = getenv("SQS_QUEUE_PDF")
 S3_BUCKET = getenv("S3_BUCKET")
 
 app = Chalice(app_name='lambda_pdf_deriv')
-app.debug = False
+app.debug = True
 app.log.setLevel(logging.WARN)
 
 s3_client = boto3.client('s3')
@@ -64,10 +66,24 @@ def _images(prefix: str, extensions: tuple[str, ...] = DEFAULT_IMAGE_EXTENSIONS,
                 yield {'file': file, 'size': size}
 
 
+@app.route('/find/{bag}')
+def find_source_bag(bag: str) -> str:
+    """ find a bag in S3 returnng path and bag name"""
+    for location in SOURCE_BAG_LOCATIONS:
+        key = f'{location}/{bag}/bagit.txt'
+        try:
+            s3_client.head_object(Bucket=S3_BUCKET, Key=key)
+            return {"location": f'{location}/{bag}'}
+        except ClientError as e:
+            continue  # try next location
+    raise NotFoundError('Could not find bag matching request!')
+
+
 @app.route('/images/source/{bag}')
 def images_source(bag: str) -> list[dict]:
     """ API endpoint to list available source images and file sizes """
-    return list(_images(f'source/{bag}/data/'))
+    location = find_source_bag(bag)['location']
+    return list(_images(f'{location}/data/'))
 
 
 @app.route('/images/derivatives/{bag}/{scale}')
@@ -185,7 +201,7 @@ def generate_pdf(bag: str) -> dict:
 
 
 @app.route('/resize/{bag}/{scale}/{image_path}')
-def resize_individual(bag: str, scale: float, image_path: str) -> dict:
+def resize_individual(bag: str, scale: float, image_path: str, location: str = "") -> dict:
     """ API endpoint to resize specific image """
     deriv_image_path = Path(image_path).with_suffix('.jpg')
     destination = f'derivative/{bag}/{scale}/{deriv_image_path}'
@@ -198,7 +214,8 @@ def resize_individual(bag: str, scale: float, image_path: str) -> dict:
         pass  # does not exist - continue
 
     try:
-        source_image = Image.open(_s3_byte_stream(S3_BUCKET, f'source/{bag}/data/{image_path}'))
+        bag_location = location if location else bag
+        source_image = Image.open(_s3_byte_stream(S3_BUCKET, f'{bag_location}/data/{image_path}'))
     except Exception as e:
         app.log.error(f'Failed to open source image: {image_path}')
         app.log.error(traceback.format_exc())
@@ -223,8 +240,8 @@ def deriv_generator(event) -> None:
     for record in event:
         record_body = record.body
         app.log.debug(record_body)
-        bag, scale, image = loads(record_body)
-        resize_individual(bag, scale, image)
+        bag, scale, image, location = loads(record_body)
+        resize_individual(bag, scale, image, location)
 
 
 @app.route('/resize/{bag}/{scale}')
@@ -232,10 +249,12 @@ def resize(bag: str, scale: float) -> dict:
     """ API endpoint to resize images for specified bag """
     app.log.debug(f'Using queue: {deriv_queue}')
     app.log.info(f'Processing {bag}')
+    location = find_source_bag(bag)['location']
+    app.log.info(f'Using location {location}')
     for full_s3_key in images_source(bag):
         image = full_s3_key.get("file").split('/')[-1]
         resp = deriv_queue.send_message(
-            MessageBody=dumps((bag, scale, image))
+            MessageBody=dumps((bag, scale, image, location))
         )
         app.log.debug(resp)
     return {'message': 'submitted for processing'}
