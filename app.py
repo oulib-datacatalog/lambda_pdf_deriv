@@ -24,8 +24,8 @@ DEFAULT_IMAGE_EXTENSIONS = ('jpg', 'tif', 'tiff', 'png')
 
 SOURCE_BAG_LOCATIONS = ['source', 'private/external-preservation', 'private/preservation', 'private/private', 'private/shareok']
 
-LAMBDA_MAX_MEMORY_FOR_PDF = 4294967296  # 4GB
-LAMBDA_MAX_MEMORY_FOR_DERIV = 2147483648  # 2GB
+LAMBDA_MAX_MEMORY_FOR_PDF = 2147483648  # 2GB
+LAMBDA_MAX_MEMORY_FOR_DERIV = 1073741824  # 1GB
 
 
 ########################################################

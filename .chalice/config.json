@@ -23,19 +23,19 @@
           "tags": {
             "Product": "Derivative Generation"
           },
-          "lambda_memory_size": 2048
+          "lambda_memory_size": 1024
         },
         "deriv_generator": {
           "tags": {
             "Product": "Derivative Generation"
           },
-          "lambda_memory_size": 2048
+          "lambda_memory_size": 1024
         },
         "pdf_generator": {
           "tags": {
             "Product": "PDF Generation"
           },
-          "lambda_memory_size": 4096
+          "lambda_memory_size": 2048
         }
       }
     }
