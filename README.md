@@ -25,3 +25,9 @@ Chalice AWS Lambda functions for OU Libraries Derivative and PDF Generation
 ## TODO
 * Create deployment script to setup AWS service dependencies and roles
 * Store results in a database
+
+## Notes
+The following are notes to help with working with AWS Lambda and Chalice
+
+* [Error handling and automatic retries in AWS Lambda](https://docs.aws.amazon.com/lambda/latest/dg/invocation-retries.html)
+* [Following serverless best practices with AWS Chalice and Lambda Powertools](https://aws.amazon.com/blogs/developer/following-serverless-best-practices-with-aws-chalice-and-lambda-powertools/)
