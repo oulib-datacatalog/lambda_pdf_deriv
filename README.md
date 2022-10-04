@@ -31,3 +31,4 @@ The following are notes to help with working with AWS Lambda and Chalice
 
 * [Error handling and automatic retries in AWS Lambda](https://docs.aws.amazon.com/lambda/latest/dg/invocation-retries.html)
 * [Following serverless best practices with AWS Chalice and Lambda Powertools](https://aws.amazon.com/blogs/developer/following-serverless-best-practices-with-aws-chalice-and-lambda-powertools/)
+* [Understanding SQS retries](https://docs.aws.amazon.com/lambda/latest/operatorguide/sqs-retries.html)
