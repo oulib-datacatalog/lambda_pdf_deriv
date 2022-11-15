@@ -6,19 +6,19 @@ from moto import mock_s3, mock_sqs
 
 @pytest.fixture
 def aws_credentials():
-    """Mocked AWS Credentials for moto."""
-    os.environ["AWS_ACCESS_KEY_ID"] = "testing"
-    os.environ["AWS_SECRET_ACCESS_KEY"] = "testing"
-    os.environ["AWS_SECURITY_TOKEN"] = "testing"
-    os.environ["AWS_SESSION_TOKEN"] = "testing"
-    os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
+    """ assert mock environment set from pytest.ini """
+    assert os.environ["AWS_ACCESS_KEY_ID"] == "TESTING"
+    assert os.environ["AWS_SECRET_ACCESS_KEY"] == "TESTING"
+    assert os.environ["AWS_SECURITY_TOKEN"] == "TESTING"
+    assert os.environ["AWS_SESSION_TOKEN"] == "TESTING"
+    assert os.environ["AWS_DEFAULT_REGION"] == "us-east-1"
 
 
 @pytest.fixture
 def default_env():
-    os.environ["SQS_QUEUE_DERIV"] = "test-queue"
-    os.environ["SQS_QUEUE_PDF"] = "test-queue"
-    os.environ["S3_BUCKET"] = "test-bucket"
+    assert os.environ["SQS_QUEUE_DERIV"] == "TEST-DERIV-QUEUE"
+    assert os.environ["SQS_QUEUE_PDF"] == "TEST-PDF-QUEUE"
+    assert os.environ["S3_BUCKET"] == "TEST-BUCKET"
 
 
 @pytest.fixture

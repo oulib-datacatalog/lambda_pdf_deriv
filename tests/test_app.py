@@ -16,7 +16,7 @@ def test_s3_client(s3_client, s3_test):
 
 
 def test_get_deriv_queue(sqs_resource, sqs_test, default_env):
-    assert os.environ["SQS_QUEUE_DERIV"] == "test-queue"
+    assert os.environ["SQS_QUEUE_DERIV"] == "TEST-DERIV-QUEUE"
     #assert get_deriv_queue() == None
 
 

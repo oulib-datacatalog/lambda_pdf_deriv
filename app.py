@@ -4,7 +4,7 @@ from json import dumps, loads
 from os import getenv
 from pathlib import Path
 from typing import Iterator, BinaryIO
-from functools import cache, lru_cache
+from functools import cache
 
 import boto3
 from botocore.exceptions import ClientError
@@ -140,7 +140,7 @@ def _object_size(bucket: str, key: str) -> int:
 
 
 @cache
-def _is_file_too_large(file_sizes: int or tuple[int], max_size: int = LAMBDA_MAX_MEMORY_FOR_DERIV, buffer_ratio: float = 0.3) -> bool:
+def _is_file_too_large(file_sizes: int or tuple[int, ...], max_size: int = LAMBDA_MAX_MEMORY_FOR_DERIV, buffer_ratio: float = 0.3) -> bool:
     """
     check if enough memory is available based on memory size with a buffer ratio reserved for derivatives
     defaults to a memory size for derivative generation and a reservation of 30% of available memory
@@ -163,7 +163,7 @@ def _generate_pdf(bag: str, title: str = None, author: str = None, subject: str 
 
     try:  # Test for existing derivatives
         image_paths, image_sizes = zip(
-            *((item['file'], item['size'])
+            *((item['file'], item['size'])  # returning tuples
               for item in images_derivative(bag, scale=DEFAULT_IMAGE_SCALE)
               )
         )
