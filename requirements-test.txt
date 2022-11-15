@@ -1,0 +1,7 @@
+-rrequirements.txt
+pytest
+pytest-mock
+pytest-env
+moto[s3,sqs]
+coverage
+chalice

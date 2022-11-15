@@ -1,10 +1,10 @@
 import io
 import traceback
-
 from json import dumps, loads
 from os import getenv
 from pathlib import Path
-from typing import Iterator, BinaryIO, List
+from typing import Iterator, BinaryIO
+from functools import cache, lru_cache
 
 import boto3
 from botocore.exceptions import ClientError
@@ -50,12 +50,32 @@ app.register_middleware(ConvertToMiddleware(tracer.capture_lambda_handler))
 ########################################################
 # AWS bindings
 
-s3_client = boto3.client('s3')
-s3_paginator = s3_client.get_paginator('list_objects_v2')
+@cache
+def get_s3_client():
+    return boto3.client('s3')
 
-sqs = boto3.resource('sqs')
-deriv_queue = sqs.get_queue_by_name(QueueName=SQS_QUEUE_DERIV)
-pdf_queue = sqs.get_queue_by_name(QueueName=SQS_QUEUE_PDF)
+
+@cache
+def get_s3_paginator():
+    s3_client = get_s3_client()
+    return s3_client.get_paginator('list_objects_v2')
+
+
+@cache
+def get_sqs():
+    return boto3.resource('sqs')
+
+
+@cache
+def get_deriv_queue():
+    sqs = get_sqs()
+    return sqs.get_queue_by_name(QueueName=SQS_QUEUE_DERIV)
+
+
+@cache
+def get_pdf_queue():
+    sqs = get_sqs()
+    return sqs.get_queue_by_name(QueueName=SQS_QUEUE_PDF)
 
 
 ########################################################
@@ -74,7 +94,7 @@ def _filter_keep(file: str, extensions: tuple[str, ...] = DEFAULT_IMAGE_EXTENSIO
 
 def _images(prefix: str, extensions: tuple[str, ...] = DEFAULT_IMAGE_EXTENSIONS, ignore_orig: bool = True) -> Iterator[dict]:
     """ yield image paths and file sizes in S3 with applied filtering """
-    for page in s3_paginator.paginate(Bucket=S3_BUCKET, Prefix=prefix):
+    for page in get_s3_paginator().paginate(Bucket=S3_BUCKET, Prefix=prefix):
         try:
             contents = page['Contents']
         except KeyError as e:
@@ -92,11 +112,13 @@ def _images(prefix: str, extensions: tuple[str, ...] = DEFAULT_IMAGE_EXTENSIONS,
                 yield {'file': file, 'size': size}
 
 
+@cache
 def _find_source_bag(bag: str) -> str:
-    """ find a bag in S3 returnng path and bag name"""
+    """ find a bag in S3 returning path and bag name"""
     for location in SOURCE_BAG_LOCATIONS:
         key = f'{location}/{bag}/bagit.txt'
         try:
+            s3_client = get_s3_client()
             s3_client.head_object(Bucket=S3_BUCKET, Key=key)
             return {"location": f'{location}/{bag}'}
         except ClientError as e:
@@ -106,25 +128,31 @@ def _find_source_bag(bag: str) -> str:
 
 def _s3_byte_stream(bucket: str, key: str) -> BinaryIO:
     """ return an S3 object's data as a BytesIO stream """
+    s3_client = get_s3_client()
     return io.BytesIO(s3_client.get_object(Bucket=bucket, Key=key)['Body'].read())
 
 
+@cache
 def _object_size(bucket: str, key: str) -> int:
     """ return the file size of an S3 object in bytes """
+    s3_client = get_s3_client()
     return s3_client.head_object(Bucket=bucket, Key=key)['ContentLength']
 
 
-def _is_file_too_large(file_sizes: List[int], max_size: int = LAMBDA_MAX_MEMORY_FOR_DERIV, buffer_ratio: float = 0.3) -> bool:
+@cache
+def _is_file_too_large(file_sizes: int or tuple[int], max_size: int = LAMBDA_MAX_MEMORY_FOR_DERIV, buffer_ratio: float = 0.3) -> bool:
     """
-    compute if enough memory available based on memory size and with a buffer ratio reserved for derivatives
+    check if enough memory is available based on memory size with a buffer ratio reserved for derivatives
     defaults to a memory size for derivative generation and a reservation of 30% of available memory
     """
-    return max_size * (1 - buffer_ratio) - sum(file_sizes) < 0
+    total_size = sum(file_sizes) if isinstance(file_sizes, tuple) else file_sizes
+    return max_size * (1 - buffer_ratio) - total_size < 0
 
 
 def _generate_pdf(bag: str, title: str = None, author: str = None, subject: str = None, keywords: str = None) -> dict:
     """ Generates PDF from default derivative images """
     destination = f'derivative/{bag}/pdf/{bag}.pdf'
+    s3_client = get_s3_client()
 
     try:  # Test for existing pdf
         s3_client.head_object(Bucket=S3_BUCKET, Key=destination)
@@ -233,6 +261,7 @@ def images_derivative(bag: str, scale: float = DEFAULT_IMAGE_SCALE) -> list[dict
 @app.route('/images/derivatives/{bag}')
 def available_derivatives(bag: str) -> list[str]:
     """ API endpoint to list available derivative scales """
+    s3_client = get_s3_client()
     # FIXME: this will get the first 1000 items matched against prefix and may miss some results
     return list(
         set(
@@ -249,6 +278,7 @@ def generate_pdf(bag: str) -> dict:
     """ API endpoint for requesting PDF generation """
     request = app.current_request
     data = request.json_body if request.json_body else {}
+    pdf_queue = get_pdf_queue
     logger.debug(f'Using queue: {pdf_queue}')
     logger.info(f'Processing {bag}')
     resp = pdf_queue.send_message(
@@ -271,6 +301,7 @@ def resize_individual(bag: str, scale: float, image_path: str, location: str = "
     """ API endpoint to resize specific image """
     deriv_image_path = Path(image_path).with_suffix('.jpg')
     destination = f'derivative/{bag}/{scale}/{deriv_image_path}'
+    s3_client = get_s3_client()
 
     try:  # Test for existing derivative
         s3_client.head_object(Bucket=S3_BUCKET, Key=destination)
@@ -306,6 +337,7 @@ def resize_individual(bag: str, scale: float, image_path: str, location: str = "
 @app.route('/resize/{bag}/{scale}')
 def resize(bag: str, scale: float) -> dict:
     """ API endpoint to resize images for specified bag """
+    deriv_queue = get_deriv_queue
     logger.debug(f'Using queue: {deriv_queue}')
     logger.info(f'Processing {bag}')
     location = _find_source_bag(bag)['location']
@@ -313,7 +345,7 @@ def resize(bag: str, scale: float) -> dict:
     for image_details in images_source(bag, location):
         size = image_details.get('size')
         image_filename = image_details.get("file").split('/')[-1]
-        if _is_file_too_large([size]):
+        if _is_file_too_large(size):
             logger.error(f"{image_filename} from {bag} is too large to process!")
         else:
             resp = deriv_queue.send_message(
