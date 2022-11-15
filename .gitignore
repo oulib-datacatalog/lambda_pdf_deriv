@@ -1,4 +1,6 @@
 .chalice/deployments/
 .chalice/venv/
 .idea/
+.tox/
+.coverage/
 __pycache__/
