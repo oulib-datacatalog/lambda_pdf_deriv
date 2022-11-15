@@ -54,9 +54,30 @@ def sqs_client(aws_credentials):
 
 
 @pytest.fixture
-def sqs_test(sqs_resource):
+def deriv_queue(default_env):
+    return os.environ["SQS_QUEUE_DERIV"]
+
+
+@pytest.fixture
+def sqs_test_deriv(sqs_resource, deriv_queue):
     queue = sqs_resource.create_queue(
-        QueueName = "test-queue",
+        QueueName = deriv_queue,
+        Attributes = {
+            "VisibilityTimeout": "60"
+        }
+    )
+    yield queue
+
+
+@pytest.fixture
+def pdf_queue(default_env):
+    return os.environ["SQS_QUEUE_PDF"]
+
+
+@pytest.fixture
+def sqs_test_pdf(sqs_resource, pdf_queue):
+    queue = sqs_resource.create_queue(
+        QueueName = pdf_queue,
         Attributes = {
             "VisibilityTimeout": "60"
         }
