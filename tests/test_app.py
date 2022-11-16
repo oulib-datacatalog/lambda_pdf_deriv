@@ -1,8 +1,13 @@
 import os
 import boto3
 import botocore
+from functools import cache
 from chalice.test import Client
-from app import app, get_s3_client, get_s3_paginator, get_sqs, get_deriv_queue, get_pdf_queue, _is_file_too_large, _filter_keep
+from chalice.app import NotFoundError
+import pytest
+
+from app import app, get_s3_client, get_s3_paginator, get_sqs, get_deriv_queue, get_pdf_queue, _is_file_too_large, _filter_keep, _images, \
+    _find_source_bag, _s3_byte_stream, _object_size
 from app import DEFAULT_IMAGE_EXTENSIONS
 
 
@@ -15,6 +20,27 @@ def test_s3_client(s3_client, s3_test):
     bucket = os.environ["S3_BUCKET"]
     client = boto3.client("s3", region_name="us-east-1")
     assert [bucket["Name"] for bucket in client.list_buckets()["Buckets"]] == [bucket]
+
+
+def test_caching():
+
+    class ExampleClass():
+        pass
+    
+    @cache
+    def cached_result():
+        return ExampleClass()
+    
+    def noncached_result():
+        return ExampleClass()
+    
+    c1 = cached_result()
+    c2 = cached_result()
+    n1 = noncached_result()
+    n2 = noncached_result()
+
+    assert id(c1) == id(c2)  # these are the same object instance
+    assert id(n1) != id(n2)  # these point to different instances
 
 
 def test_get_s3_client_reuses_object_instance(s3_client):
@@ -48,7 +74,7 @@ def test_get_pdf_queue_reuses_object_instance(sqs_test_pdf):
     assert id(pdf_queue_1) == id(pdf_queue_2)  # these are the same object instance
 
 
-def test_is_file_too_large():
+def test__is_file_too_large():
     assert _is_file_too_large(file_sizes=1024, max_size=1024, buffer_ratio=0.3) == True
     assert _is_file_too_large(file_sizes=(1024), max_size=1024, buffer_ratio=0.3) == True
     assert _is_file_too_large(file_sizes=716, max_size=1024, buffer_ratio=0.3) == False
@@ -57,7 +83,7 @@ def test_is_file_too_large():
     assert _is_file_too_large(file_sizes=716.9, max_size=1024, buffer_ratio=0.3) == True
 
 
-def test_filter_keep():
+def test__filter_keep():
     for ext in DEFAULT_IMAGE_EXTENSIONS:
         assert _filter_keep(f"data/test.{ext}") == True
         assert _filter_keep(f"data/test_orig.{ext}") == False
@@ -66,3 +92,45 @@ def test_filter_keep():
 
     assert "gif" not in DEFAULT_IMAGE_EXTENSIONS
     assert _filter_keep("data/test.gif") == False
+
+
+def test__images(s3_client, s3_test, bucket_name):
+    prefix = "source/test_bag_2022"
+    body = "test"
+    count = 10
+    for index in range(count):
+        s3_client.put_object(Bucket=bucket_name, Key=f"{prefix}/data/image{index:03}.tif", Body=body)
+        s3_client.put_object(Bucket=bucket_name, Key=f"{prefix}/data/image{index:03}_orig.tif", Body=body)
+        s3_client.put_object(Bucket=bucket_name, Key=f"{prefix}/data/image{index:03}.CR2", Body=body)
+    
+    assert list(_images(prefix=prefix)) == [{"file": f"{prefix}/data/image{index:03}.tif", "size": len(body)} for index in range(count)]
+    assert list(_images(prefix=prefix, extensions=("does_not_exist_in_list"))) == []
+
+
+def test__find_source_bag(s3_client, s3_test, bucket_name):
+    prefix = "source/test_bag_2022"
+    s3_client.put_object(Bucket=bucket_name, Key=f"{prefix}/bagit.txt", Body="test")
+    assert _find_source_bag("test_bag_2022") == {"location": prefix}
+
+    with pytest.raises(NotFoundError):
+        _find_source_bag("does_not_exist")
+    
+
+def test__s3_byte_stream(s3_client, s3_test, bucket_name):
+    prefix = "source/test_bag_2022"
+    body = b"test"
+    s3_client.put_object(Bucket=bucket_name, Key=f"{prefix}/bagit.txt", Body=body)
+    assert _s3_byte_stream(bucket=bucket_name, key=f"{prefix}/bagit.txt").read() == body
+
+    with pytest.raises(NotFoundError):
+        _s3_byte_stream(bucket=bucket_name, key="does_not_exist").read()
+
+
+def test__object_size(s3_client, s3_test, bucket_name):
+    prefix = "source/test_bag_2022"
+    body = b"test"
+    s3_client.put_object(Bucket=bucket_name, Key=f"{prefix}/bagit.txt", Body=body)
+    assert _object_size(bucket=bucket_name, key=f"{prefix}/bagit.txt") == len(body)
+
+    with pytest.raises(NotFoundError):
+        _object_size(bucket=bucket_name, key="does_not_exist")

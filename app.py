@@ -129,14 +129,20 @@ def _find_source_bag(bag: str) -> str:
 def _s3_byte_stream(bucket: str, key: str) -> BinaryIO:
     """ return an S3 object's data as a BytesIO stream """
     s3_client = get_s3_client()
-    return io.BytesIO(s3_client.get_object(Bucket=bucket, Key=key)['Body'].read())
+    try:
+        return io.BytesIO(s3_client.get_object(Bucket=bucket, Key=key)['Body'].read())
+    except ClientError:
+        raise NotFoundError('Could not access object!')
 
 
 @cache
 def _object_size(bucket: str, key: str) -> int:
     """ return the file size of an S3 object in bytes """
     s3_client = get_s3_client()
-    return s3_client.head_object(Bucket=bucket, Key=key)['ContentLength']
+    try:
+        return s3_client.head_object(Bucket=bucket, Key=key)['ContentLength']
+    except ClientError:
+        raise NotFoundError('Could not access object!')
 
 
 @cache
