@@ -1,14 +1,16 @@
 import os
 import boto3
 import botocore
+import pytest
+from io import BytesIO
 from functools import cache
 from chalice.test import Client
 from chalice.app import NotFoundError
-import pytest
+from PIL import Image, ImageColor
 
 from app import app, get_s3_client, get_s3_paginator, get_sqs, get_deriv_queue, get_pdf_queue, _is_file_too_large, _filter_keep, _images, \
-    _find_source_bag, _s3_byte_stream, _object_size
-from app import DEFAULT_IMAGE_EXTENSIONS
+    _find_source_bag, _s3_byte_stream, _object_size, _generate_pdf
+from app import DEFAULT_IMAGE_EXTENSIONS, DEFAULT_IMAGE_SCALE
 
 
 def test_default_regions(aws_credentials, s3_client):
@@ -134,3 +136,16 @@ def test__object_size(s3_client, s3_test, bucket_name):
 
     with pytest.raises(NotFoundError):
         _object_size(bucket=bucket_name, key="does_not_exist")
+
+
+def test__generate_pdf(s3_client, s3_test, bucket_name):
+    prefix = f"derivative/test_bag_2022/{DEFAULT_IMAGE_SCALE}"
+    count = 10
+    with BytesIO() as output:
+        Image.new( mode = "RGB", size = (300, 400), color = ImageColor.getrgb("#841617") ).save(output, format="JPEG")
+        for index in range(count):
+            output.seek(0)
+            s3_client.put_object(Bucket=bucket_name, Key=f"{prefix}/data/image{index:03}.jpg", Body=output)
+    assert _generate_pdf("test_bag_2022") == {"message": "success"}
+    assert _generate_pdf("test_bag_2022") == {"message": "PDF already exists"}
+    assert _generate_pdf("does_not_exist") == {"message": "missing derivative to generate PDF"}
