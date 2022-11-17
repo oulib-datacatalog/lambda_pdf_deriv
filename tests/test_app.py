@@ -5,7 +5,7 @@ import pytest
 from io import BytesIO
 from functools import cache
 from chalice.test import Client
-from chalice.app import NotFoundError
+from chalice.app import NotFoundError, BadRequestError
 from PIL import Image, ImageColor
 
 from app import app, get_s3_client, get_s3_paginator, get_sqs, get_deriv_queue, get_pdf_queue, _is_file_too_large, _filter_keep, _images, \
@@ -149,3 +149,10 @@ def test__generate_pdf(s3_client, s3_test, bucket_name):
     assert _generate_pdf("test_bag_2022") == {"message": "success"}
     assert _generate_pdf("test_bag_2022") == {"message": "PDF already exists"}
     assert _generate_pdf("does_not_exist") == {"message": "missing derivative to generate PDF"}
+
+
+def test__generate_pdf_invalid_image(s3_client, s3_test, bucket_name):
+    prefix = f"derivative/test_bag_2022/{DEFAULT_IMAGE_SCALE}"
+    s3_client.put_object(Bucket=bucket_name, Key=f"{prefix}/data/image001.jpg", Body=b"invalid image data")
+    with pytest.raises(BadRequestError):
+        _generate_pdf("test_bag_2022") == {"message": "success"}

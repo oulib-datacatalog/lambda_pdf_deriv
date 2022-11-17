@@ -13,7 +13,7 @@ from chalice.app import ConvertToMiddleware
 from aws_lambda_powertools import Logger
 from aws_lambda_powertools import Tracer
 
-from PIL import Image
+from PIL import Image, UnidentifiedImageError
 
 
 #########################################################
@@ -186,23 +186,26 @@ def _generate_pdf(bag: str, title: str = None, author: str = None, subject: str 
 
     # get contents of first image to bootstrap PDF generation
     image_path = image_paths[0]
-    pdf = Image.open(_s3_byte_stream(bucket=S3_BUCKET, key=image_path))
+    try:
+        pdf = Image.open(_s3_byte_stream(bucket=S3_BUCKET, key=image_path))
 
-    # save generated PDF back to S3
-    pdf_file = io.BytesIO()
-    pdf.save(
-        pdf_file,
-        format='PDF',
-        save_all=True,
-        title=title,
-        author=author,
-        subject=subject,
-        keywords=keywords,
-        append_images=(
-            Image.open(_s3_byte_stream(bucket=S3_BUCKET, key=image_path))
-            for image_path in image_paths[1:]  # skipping first image used to bootstrap pdf
+        # save generated PDF back to S3
+        pdf_file = io.BytesIO()
+        pdf.save(
+            pdf_file,
+            format='PDF',
+            save_all=True,
+            title=title,
+            author=author,
+            subject=subject,
+            keywords=keywords,
+            append_images=(
+                Image.open(_s3_byte_stream(bucket=S3_BUCKET, key=image_path))
+                for image_path in image_paths[1:]  # skipping first image used to bootstrap pdf
+            )
         )
-    )
+    except UnidentifiedImageError:
+        raise BadRequestError("An image is invalid for PDF generation.")
     pdf_file.flush()
     pdf_file.seek(0)
     try:
