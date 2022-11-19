@@ -29,8 +29,7 @@ def bucket_name(default_env):
 @pytest.fixture
 def s3_client(aws_credentials):
     with mock_s3():
-        conn = boto3.client("s3", region_name="us-east-1")
-        yield conn
+        yield boto3.client("s3", region_name="us-east-1")
 
 
 @pytest.fixture
@@ -42,15 +41,13 @@ def s3_test(s3_client, bucket_name):
 @pytest.fixture
 def sqs_resource(aws_credentials):
     with mock_sqs():
-        conn = boto3.resource("sqs", region_name="us-east-1")
-        yield conn
+        yield boto3.resource("sqs", region_name="us-east-1")
 
 
 @pytest.fixture
 def sqs_client(aws_credentials):
     with mock_sqs():
-        conn = boto3.client("sqs", region_name="us-east-1")
-        yield conn
+        yield boto3.client("sqs", region_name="us-east-1")
 
 
 @pytest.fixture
@@ -60,13 +57,12 @@ def deriv_queue(default_env):
 
 @pytest.fixture
 def sqs_test_deriv(sqs_resource, deriv_queue):
-    queue = sqs_resource.create_queue(
+    yield sqs_resource.create_queue(
         QueueName = deriv_queue,
         Attributes = {
             "VisibilityTimeout": "60"
         }
     )
-    yield queue
 
 
 @pytest.fixture
@@ -76,10 +72,9 @@ def pdf_queue(default_env):
 
 @pytest.fixture
 def sqs_test_pdf(sqs_resource, pdf_queue):
-    queue = sqs_resource.create_queue(
+    yield sqs_resource.create_queue(
         QueueName = pdf_queue,
         Attributes = {
             "VisibilityTimeout": "60"
         }
     )
-    yield queue

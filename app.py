@@ -182,7 +182,7 @@ def _generate_pdf(bag: str, title: str = None, author: str = None, subject: str 
     logger.debug(f'LAMBDA_MAX_MEMORY_FOR_PDF: {LAMBDA_MAX_MEMORY_FOR_PDF}')
     if _is_file_too_large(image_sizes, max_size=LAMBDA_MAX_MEMORY_FOR_PDF, buffer_ratio=0.3):
         logger.error(f'Total size of derivatives is more than half of available memory: {sum(image_sizes)}')
-        return {'message': 'memory limit exceeded'}
+        return {'message': 'Memory limit exceeded!'}
 
     # get contents of first image to bootstrap PDF generation
     image_path = image_paths[0]
@@ -212,6 +212,7 @@ def _generate_pdf(bag: str, title: str = None, author: str = None, subject: str 
         s3_client.put_object(Bucket=S3_BUCKET, Key=destination, Body=pdf_file)
     except:
         logger.error(f'Failed to save PDF to S3 for bag: {bag}')
+        return {'message': 'failed to save PDF file'}
     logger.info(f'Generated PDF for bag: {bag}')
     return {'message': 'success'}
 
@@ -272,14 +273,17 @@ def available_derivatives(bag: str) -> list[str]:
     """ API endpoint to list available derivative scales """
     s3_client = get_s3_client()
     # FIXME: this will get the first 1000 items matched against prefix and may miss some results
-    return list(
-        set(
-            [
-                item['Key'].split('/')[2]
-                for item in s3_client.list_objects(Bucket=S3_BUCKET, Prefix=f'derivative/{bag}/')['Contents']
-            ]
+    try:
+        return list(
+            set(
+                [
+                    item['Key'].split('/')[2]
+                    for item in s3_client.list_objects(Bucket=S3_BUCKET, Prefix=f'derivative/{bag}/')['Contents']
+                ]
+            )
         )
-    )
+    except KeyError:
+        raise NotFoundError('No derivatives found')
 
 
 @app.route('/pdf/{bag}', methods=['GET', 'POST'])
@@ -287,7 +291,7 @@ def generate_pdf(bag: str) -> dict:
     """ API endpoint for requesting PDF generation """
     request = app.current_request
     data = request.json_body if request.json_body else {}
-    pdf_queue = get_pdf_queue
+    pdf_queue = get_pdf_queue()
     logger.debug(f'Using queue: {pdf_queue}')
     logger.info(f'Processing {bag}')
     resp = pdf_queue.send_message(
@@ -320,7 +324,7 @@ def resize_individual(bag: str, scale: float, image_path: str, location: str = "
         pass  # does not exist - continue
 
     bag_location = location if location else bag
-    if _is_file_too_large(_object_size(S3_BUCKET, f'{bag_location}/data/{image_path}')):
+    if _is_file_too_large(_object_size(S3_BUCKET, f'{bag_location}/data/{image_path}'),  max_size=LAMBDA_MAX_MEMORY_FOR_DERIV):
         raise BadRequestError("The source image is too large")
 
     try:
@@ -346,7 +350,7 @@ def resize_individual(bag: str, scale: float, image_path: str, location: str = "
 @app.route('/resize/{bag}/{scale}')
 def resize(bag: str, scale: float) -> dict:
     """ API endpoint to resize images for specified bag """
-    deriv_queue = get_deriv_queue
+    deriv_queue = get_deriv_queue()
     logger.debug(f'Using queue: {deriv_queue}')
     logger.info(f'Processing {bag}')
     location = _find_source_bag(bag)['location']

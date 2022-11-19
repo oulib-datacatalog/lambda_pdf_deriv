@@ -1,15 +1,17 @@
 import os
 import boto3
-import botocore
 import pytest
 from io import BytesIO
 from functools import cache
-from chalice.test import Client
+from json import loads
+from unittest.mock import patch
 from chalice.app import NotFoundError, BadRequestError
 from PIL import Image, ImageColor
 
-from app import app, get_s3_client, get_s3_paginator, get_sqs, get_deriv_queue, get_pdf_queue, _is_file_too_large, _filter_keep, _images, \
-    _find_source_bag, _s3_byte_stream, _object_size, _generate_pdf
+from app import get_s3_client, get_s3_paginator, get_sqs, get_deriv_queue, get_pdf_queue, \
+    _is_file_too_large, _filter_keep, _images, _find_source_bag, _s3_byte_stream, _object_size, \
+    _generate_pdf, resize_individual, images_source, images_derivative, available_derivatives, \
+    resize
 from app import DEFAULT_IMAGE_EXTENSIONS, DEFAULT_IMAGE_SCALE
 
 
@@ -156,3 +158,100 @@ def test__generate_pdf_invalid_image(s3_client, s3_test, bucket_name):
     s3_client.put_object(Bucket=bucket_name, Key=f"{prefix}/data/image001.jpg", Body=b"invalid image data")
     with pytest.raises(BadRequestError):
         _generate_pdf("test_bag_2022") == {"message": "success"}
+
+
+def test__generate_pdf_exceeds_buffer(s3_client, s3_test, bucket_name):
+    prefix = f"derivative/test_bag_2022/{DEFAULT_IMAGE_SCALE}"
+    mock_max_memory = patch("app.LAMBDA_MAX_MEMORY_FOR_PDF", 0)
+    mock_max_memory.start()
+    with BytesIO() as output:
+        Image.new( mode = "RGB", size = (300, 400), color = ImageColor.getrgb("#841617") ).save(output, format="JPEG")
+        output.seek(0)
+        s3_client.put_object(Bucket=bucket_name, Key=f"{prefix}/data/image001.jpg", Body=output)
+    assert _generate_pdf("test_bag_2022") == {"message": "Memory limit exceeded!"}
+    mock_max_memory.stop()
+
+
+def test_available_derivatives(s3_client, s3_test, bucket_name):
+    bag = "test_bag_2022"
+    s3_client.put_object(Bucket=bucket_name, Key=f"derivative/{bag}/0.4/image001.jpg", Body="test data")
+    s3_client.put_object(Bucket=bucket_name, Key=f"derivative/{bag}/0.6/image001.jpg", Body="test data")
+
+    assert sorted(available_derivatives(bag)) == ["0.4", "0.6"]
+
+    with pytest.raises(NotFoundError):
+        available_derivatives("does_not_exist")
+
+
+def test_images_derivatives(s3_client, s3_test, bucket_name):
+    bag = "test_bag_2022"
+    s3_client.put_object(Bucket=bucket_name, Key=f"derivative/{bag}/0.4/image001.jpg", Body="test data")
+    s3_client.put_object(Bucket=bucket_name, Key=f"derivative/{bag}/0.4/image002.jpg", Body="test data")
+
+    assert sorted(record["file"] for record in images_derivative(bag)) == [
+        'derivative/test_bag_2022/0.4/image001.jpg',
+        'derivative/test_bag_2022/0.4/image002.jpg'
+    ]
+
+    with pytest.raises(NotFoundError):
+        images_derivative("does_not_exist")
+
+
+def test_resize_individual(s3_client, s3_test, bucket_name):
+    bag = "test_bag_2022"
+    size = (300, 400)
+    with BytesIO() as output:
+        Image.new(mode="RGB", size=size, color=ImageColor.getrgb("#841617")).save(output, format="TIFF")
+        output.seek(0)
+        s3_client.put_object(Bucket=bucket_name, Key=f"source/{bag}/data/image001.tif", Body=output)
+
+    assert images_source(bag=bag)[0]["file"] == f"source/{bag}/data/image001.tif"
+
+    assert resize_individual(bag=bag, scale=0.4, image_path="image001.tif", location=f"source/{bag}") == {'message': 'created resized image'}
+    assert available_derivatives(bag) == ["0.4"]
+
+    assert images_derivative(bag=bag, scale=0.4)[0]["file"] == f"derivative/{bag}/0.4/image001.jpg"
+
+    img = Image.open(_s3_byte_stream(bucket=bucket_name, key=f"derivative/{bag}/0.4/image001.jpg"))
+    assert img.size == tuple(map(lambda x: x * 0.4, size))
+
+
+def test__resize_individual_invalid_image(s3_client, s3_test, bucket_name):
+    bag = "test_bag_2022"
+    s3_client.put_object(Bucket=bucket_name, Key=f"source/{bag}/data/image001.tif", Body=b"invalid image data")
+    assert resize_individual(bag=bag, scale=0.4, image_path="image001.tif", location=f"source/{bag}") == {'message': 'error opening source image'}
+
+
+def test_resize_individual_exceeds_buffer(s3_client, s3_test, bucket_name):
+    bag = "test_bag_2022"
+    size = (300, 400)
+    with BytesIO() as output:
+        Image.new(mode="RGB", size=size, color=ImageColor.getrgb("#841617")).save(output, format="TIFF")
+        output.seek(0)
+        s3_client.put_object(Bucket=bucket_name, Key=f"source/{bag}/data/image001.tif", Body=output)
+
+    mock_max_memory = patch("app.LAMBDA_MAX_MEMORY_FOR_DERIV", 0)
+    mock_max_memory.start()
+    with pytest.raises(BadRequestError):
+        resize_individual(bag=bag, scale=0.4, image_path="image001.tif", location=f"source/{bag}")
+    mock_max_memory.stop()
+
+
+def test_resize_individual_alread_exists(s3_client, s3_test, bucket_name):
+    bag = "test_bag_2022"
+    s3_client.put_object(Bucket=bucket_name, Key=f"derivative/{bag}/0.4/image001.jpg", Body="test data")
+    assert resize_individual(bag=bag, scale=0.4, image_path="image001.tif", location=f"source/{bag}") == {'message': 'image already exists'}
+
+
+def test_resize(sqs_client, sqs_test_deriv, s3_client, s3_test, bucket_name):
+    bag = "test_bag_2022"
+    scale = 0.4
+    s3_client.put_object(Bucket=bucket_name, Key=f"source/{bag}/data/image001.tif", Body="test data")
+    assert resize(bag=bag, scale=scale) == {'message': 'submitted for processing'}
+    messages = sqs_client.receive_message(QueueUrl=sqs_test_deriv.url)["Messages"]
+    assert loads(messages[0]["Body"]) == [bag, scale, "image001.tif", f"source/{bag}"]
+
+
+def test_resize_nonexisting_bag(s3_client, s3_test, bucket_name):
+    with pytest.raises(NotFoundError):
+        resize(bag="does_not_exist", scale=0.4)
