@@ -6,9 +6,10 @@ from functools import cache
 from json import loads
 from unittest.mock import patch
 from chalice.app import NotFoundError, BadRequestError
+from chalice.test import Client
 from PIL import Image, ImageColor
 
-from app import get_s3_client, get_s3_paginator, get_sqs, get_deriv_queue, get_pdf_queue, \
+from app import app, get_s3_client, get_s3_paginator, get_sqs, get_deriv_queue, get_pdf_queue, \
     _is_file_too_large, _filter_keep, _images, _find_source_bag, _s3_byte_stream, _object_size, \
     _generate_pdf, resize_individual, images_source, images_derivative, available_derivatives, \
     resize
@@ -255,3 +256,33 @@ def test_resize(sqs_client, sqs_test_deriv, s3_client, s3_test, bucket_name):
 def test_resize_nonexisting_bag(s3_client, s3_test, bucket_name):
     with pytest.raises(NotFoundError):
         resize(bag="does_not_exist", scale=0.4)
+
+
+def test_deriv_generator(s3_client, s3_test, bucket_name):
+    bag = "test_bag_2022"
+    size = (300, 400)
+    scale = 0.4
+    with BytesIO() as output:
+        Image.new(mode="RGB", size=size, color=ImageColor.getrgb("#841617")).save(output, format="TIFF")
+        output.seek(0)
+        s3_client.put_object(Bucket=bucket_name, Key=f"source/{bag}/data/image001.tif", Body=output)
+
+    with Client(app) as client:
+        client.lambda_.invoke(
+            "deriv_generator",
+            client.events.generate_sqs_event(message_bodies=[f'["{bag}", {scale}, "image001.tif", "source/{bag}"]'])
+        )
+
+    assert list(_images(prefix=f"derivative/{bag}/{scale}"))[0]["file"] == f"derivative/{bag}/{scale}/image001.jpg"
+
+
+@pytest.mark.skip(reason="needs an assertion to test")
+def test_deriv_generator_nonexistant_image(s3_client, s3_test, bucket_name):
+    bag = "does_not_exist"
+    scale = 0.4
+
+    with Client(app) as client:
+        client.lambda_.invoke(
+            "deriv_generator",
+            client.events.generate_sqs_event(message_bodies=[f'["{bag}", {scale}, "image001.tif", "source/{bag}"]'])
+        )
