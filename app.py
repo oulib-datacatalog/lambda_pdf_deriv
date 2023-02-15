@@ -335,7 +335,7 @@ def resize_individual(bag: str, scale: float, image_path: str, location: str = "
         return {'message': 'error opening source image'}
 
     size = (x * float(scale) for x in source_image.size)
-    source_image.thumbnail(size, Image.ANTIALIAS)
+    source_image.thumbnail(size, Image.Resampling.LANCZOS)  # Resize and apply antialiasing
 
     image_file = io.BytesIO()
     source_image.save(image_file, format='JPEG')
