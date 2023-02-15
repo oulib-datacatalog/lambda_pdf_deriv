@@ -20,7 +20,7 @@ from PIL import Image, UnidentifiedImageError
 # Default values
 
 DEFAULT_IMAGE_SCALE = 0.4  # of original size
-DEFAULT_IMAGE_EXTENSIONS = ('jpg', 'tif', 'tiff', 'png')
+DEFAULT_IMAGE_EXTENSIONS = ('jpg', 'tif', 'tiff', 'png')  # use lower case
 
 SOURCE_BAG_LOCATIONS = ['source', 'private/external-preservation', 'private/preservation', 'private/private', 'private/shareok']
 
@@ -83,7 +83,7 @@ def get_pdf_queue():
 
 def _filter_keep(file: str, extensions: tuple[str, ...] = DEFAULT_IMAGE_EXTENSIONS, ignore_orig: bool = True) -> bool:
     """ filters to apply to a file's name to determine if to keep """
-    if not file.endswith(extensions):
+    if not file.lower().endswith(extensions):
         return False
     if ignore_orig and 'orig' in Path(file).name.lower():
         return False
