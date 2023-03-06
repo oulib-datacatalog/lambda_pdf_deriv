@@ -323,7 +323,7 @@ def resize_individual(bag: str, scale: float, image_path: str, location: str = "
     except ClientError:
         pass  # does not exist - continue
 
-    bag_location = location if location else bag
+    bag_location = location if location else _find_source_bag(bag)['location']
     if _is_file_too_large(_object_size(S3_BUCKET, f'{bag_location}/data/{image_path}'),  max_size=LAMBDA_MAX_MEMORY_FOR_DERIV):
         raise BadRequestError("The source image is too large")
 
