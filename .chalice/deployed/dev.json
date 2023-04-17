@@ -1,0 +1,54 @@
+{
+  "resources": [
+    {
+      "name": "managed-layer",
+      "resource_type": "lambda_layer",
+      "layer_version_arn": "arn:aws:lambda:us-east-1:188033381281:layer:lambda_pdf_deriv-dev-managed-layer:58"
+    },
+    {
+      "name": "default-role",
+      "resource_type": "iam_role",
+      "role_arn": "arn:aws:iam::188033381281:role/lambda_pdf_deriv-dev",
+      "role_name": "lambda_pdf_deriv-dev"
+    },
+    {
+      "name": "pdf_generator",
+      "resource_type": "lambda_function",
+      "lambda_arn": "arn:aws:lambda:us-east-1:188033381281:function:lambda_pdf_deriv-dev-pdf_generator"
+    },
+    {
+      "name": "pdf_generator-sqs-event-source",
+      "resource_type": "sqs_event",
+      "queue_arn": "arn:aws:sqs:us-east-1:188033381281:infx_pdf_gen",
+      "event_uuid": "1b49aa36-721e-4147-ae79-c5511e473155",
+      "queue": "infx_pdf_gen",
+      "lambda_arn": "arn:aws:lambda:us-east-1:188033381281:function:lambda_pdf_deriv-dev-pdf_generator"
+    },
+    {
+      "name": "deriv_generator",
+      "resource_type": "lambda_function",
+      "lambda_arn": "arn:aws:lambda:us-east-1:188033381281:function:lambda_pdf_deriv-dev-deriv_generator"
+    },
+    {
+      "name": "deriv_generator-sqs-event-source",
+      "resource_type": "sqs_event",
+      "queue_arn": "arn:aws:sqs:us-east-1:188033381281:infx_deriv_gen",
+      "event_uuid": "04ba00a6-1c41-4dae-bd07-71385eab3420",
+      "queue": "infx_deriv_gen",
+      "lambda_arn": "arn:aws:lambda:us-east-1:188033381281:function:lambda_pdf_deriv-dev-deriv_generator"
+    },
+    {
+      "name": "api_handler",
+      "resource_type": "lambda_function",
+      "lambda_arn": "arn:aws:lambda:us-east-1:188033381281:function:lambda_pdf_deriv-dev"
+    },
+    {
+      "name": "rest_api",
+      "resource_type": "rest_api",
+      "rest_api_id": "888f9gom17",
+      "rest_api_url": "https://888f9gom17.execute-api.us-east-1.amazonaws.com/api/"
+    }
+  ],
+  "schema_version": "2.0",
+  "backend": "api"
+}

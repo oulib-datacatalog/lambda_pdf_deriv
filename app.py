@@ -8,6 +8,7 @@ from functools import cache
 
 import boto3
 from botocore.exceptions import ClientError
+from botocore.client import Config
 from chalice import Chalice, NotFoundError, BadRequestError
 from chalice.app import ConvertToMiddleware
 from aws_lambda_powertools import Logger
@@ -24,8 +25,15 @@ DEFAULT_IMAGE_EXTENSIONS = ('jpg', 'tif', 'tiff', 'png')  # use lower case
 
 SOURCE_BAG_LOCATIONS = ['source', 'private/external-preservation', 'private/preservation', 'private/private', 'private/shareok']
 
-LAMBDA_MAX_MEMORY_FOR_PDF = 2147483648  # 2GB
-LAMBDA_MAX_MEMORY_FOR_DERIV = 1073741824  # 1GB
+_6GB = 6442450944  # 6 gigabytes in bytes
+_4GB = 4294967296  # 4 gigabytes in bytes
+_2GB = 2147483648  # 2 gigabytes in bytes
+_1GB = 1073741824  # 1 gigabyte in bytes
+
+LAMBDA_MAX_MEMORY_FOR_PDF = getenv('LAMBDA_MAX_MEMORY_FOR_PDF', _4GB)
+LAMBDA_MAX_MEMORY_FOR_DERIV = getenv('LAMBDA_MAX_MEMORY_FOR_DERIV', _2GB)
+
+Image.MAX_IMAGE_PIXELS = None  # allow large images
 
 
 ########################################################
@@ -47,12 +55,13 @@ tracer = Tracer()
 app.register_middleware(ConvertToMiddleware(logger.inject_lambda_context))
 app.register_middleware(ConvertToMiddleware(tracer.capture_lambda_handler))
 
+
 ########################################################
-# AWS bindings
+# AWS bindings - these are setup as functions to allow mocking in unit tests
 
 @cache
 def get_s3_client():
-    return boto3.client('s3')
+    return boto3.client('s3', config=Config(connect_timeout=5, read_timeout=10, retries={'max_attempts': 0}))
 
 
 @cache
@@ -150,6 +159,8 @@ def _is_file_too_large(file_sizes: int or tuple[int, ...], max_size: int = LAMBD
     """
     check if enough memory is available based on memory size with a buffer ratio reserved for derivatives
     defaults to a memory size for derivative generation and a reservation of 30% of available memory
+    1 GB max_size with 30% buffer_ratio = 700 MB available
+    2 GB max_size with 30% buffer_ratio = 1.4 GB available
     """
     total_size = sum(file_sizes) if isinstance(file_sizes, tuple) else file_sizes
     return max_size * (1 - buffer_ratio) - total_size < 0
@@ -342,8 +353,14 @@ def resize_individual(bag: str, scale: float, image_path: str, location: str = "
     image_file.flush()
     image_file.seek(0)
 
-    s3_client.put_object(Bucket=S3_BUCKET, Key=destination, Body=image_file)
-    logger.info(f'Created S3 object: {destination}')
+    try:
+        s3_client.put_object(Bucket=S3_BUCKET, Key=destination, Body=image_file)
+        logger.info(f'Created S3 object: {destination}')
+    except Exception as e:
+        logger.error(f'Failed to create S3 object: {destination}')
+        logger.error(traceback.format_exc())
+        return {'message': 'error creating resized image'}
+    
     return {'message': 'created resized image'}
 
 

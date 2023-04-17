@@ -9,6 +9,7 @@
   },
   "stages": {
     "dev": {
+      "lambda_memory_size": 2048,
       "tags": {
         "Unit": "Informatics"
       },
