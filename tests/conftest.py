@@ -1,8 +1,7 @@
 import os
 import pytest
 import boto3
-from moto import mock_s3, mock_sqs
-
+from moto import mock_aws
 
 @pytest.fixture
 def aws_credentials():
@@ -28,7 +27,7 @@ def bucket_name(default_env):
 
 @pytest.fixture
 def s3_client(aws_credentials):
-    with mock_s3():
+    with mock_aws():
         yield boto3.client("s3", region_name="us-east-1")
 
 
@@ -40,13 +39,13 @@ def s3_test(s3_client, bucket_name):
 
 @pytest.fixture
 def sqs_resource(aws_credentials):
-    with mock_sqs():
+    with mock_aws():
         yield boto3.resource("sqs", region_name="us-east-1")
 
 
 @pytest.fixture
 def sqs_client(aws_credentials):
-    with mock_sqs():
+    with mock_aws():
         yield boto3.client("sqs", region_name="us-east-1")
 
 
